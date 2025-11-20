@@ -3,8 +3,6 @@ import time
 import ex1
 import search
 
-
-
 def run_problem(func, targs=(), kwargs=None):
     if kwargs is None:
         kwargs = {}
@@ -35,6 +33,8 @@ def solve_problems(problem, algorithm):
     if result and isinstance(result[0], search.Node):
         solve = result[0].path()[::-1]
         solution = [pi.action for pi in solve][1:]
+        if len(solution)==problem['optimal']:
+            print("Optimal solution reached!!!!")
         print(len(solution), solution)
     else:
         print("no solution")
@@ -72,7 +72,8 @@ problem1 = {
     "Plants": {(0, 2): 2},        # top-right
     "Robots": {
         10: (2, 0, 0, 2),         # bottom-left, cap 2
-    },
+    }, 
+    "optimal": 8,
 }
 
 # -------------------------
@@ -93,6 +94,7 @@ problem2 = {
         10: (1, 0, 0, 2),         # middle-left
         11: (1, 2, 0, 2),         # middle-right
     },
+    "optimal": 20,
 }
 
 
@@ -115,6 +117,7 @@ problem3 = {
     "Robots": {
         10: (2, 0, 0, 2),         # middle-left, cap 2 → needs multiple trips
     },
+    "optimal": 28,
 }
 
 # -------------------------
@@ -138,6 +141,7 @@ problem4 = {
         10: (3, 1, 0, 1),         # near left side
         11: (3, 3, 0, 1),         # near right side
     },
+    "optimal": 13,
 }
 
 # -------------------------
@@ -158,6 +162,7 @@ problem5_deadend = {
     "Robots": {
         10: (1, 0, 0, 2),
     },
+    "optimal": "dead end",
 }
 # -------------------------
 # Problem 6:
@@ -182,8 +187,9 @@ problem6 = {
     "Robots": {
         10: (1, 0, 0, 3),   # start left of tap, cap 3
     },
+    "optimal": 8,
 }
-#optimal: 20
+#optimal: 21
 problem7 = {
     "name": "=========problem7=========",
     "Size":  (4, 4),
@@ -204,16 +210,314 @@ problem7 = {
         10: (2, 1, 0, 3),  # left of tap, capacity 3
         11: (2, 0, 0, 3),  # right of tap, capacity 3
     },
+    "optimal": 20,
+
 }
 
+#optimal: 31
+problem_hard1 = {
+    "name": "=========problem_hard1=========",
+    "Size":  (5, 6),
 
+    "Walls": {
+        # block some middle cells to create a kind of corridor
+        (1, 2), (1, 3),
+        (3, 2), (3, 3),
+    },
+
+    "Taps": {
+        (2, 2): 12,
+    },
+
+    "Plants": {
+        (0, 1): 3,
+        (4, 5): 6,
+    },
+
+    "Robots": {
+        10: (2, 1, 0, 6),
+        11: (2, 4, 0, 3),
+    },
+    "optimal":31
+}
+
+#optimal: 24
+problem_hard2 = {
+    "name": "=========problem_hard2=========",
+    "optimal": 24,
+    "Size":  (5, 5),
+
+    # Open plus-shape in center, corners blocked
+    "Walls": {
+        (0, 0), (0, 4),
+        (4, 0), (4, 4),
+    },
+
+    "Taps": {
+        (2, 2): 9,       # center
+    },
+
+    "Plants": {
+        (1, 2): 3,       # up
+        (2, 1): 3,       # left
+        (3, 2): 3,       # down
+    },
+
+    "Robots": {
+        10: (2, 3, 0, 3),  # right of tap
+    },
+}
+#optimal: 42
+problem_hard3 = {
+    "name": "=========problem_hard3=========",
+    "optimal": 42,
+    "Size":  (5, 5),
+
+    # Open plus-shape in center, corners blocked
+    "Walls": {
+        (0, 0), (0, 4),
+        (4, 0), (4, 4),
+    },
+
+    "Taps": {
+        (2, 2): 9,       # center
+    },
+
+    "Plants": {
+        (1, 2): 3,       # up
+        (2, 1): 3,       # left
+        (3, 2): 3,       # down
+    },
+
+    "Robots": {
+        10: (2, 3, 0, 3),  # right of tap
+    },
+}
+
+#optimal: 25
+problem_hard4 = {
+    "name": "=========problem_hard4=========",
+    "optimal": 25,
+    "Size":  (5, 6),
+
+    "Walls": {
+        # corridor shifted up
+        (0, 2), (0, 3),
+        (2, 2), (2, 3),
+    },
+
+    "Taps": {
+        (1, 2): 6,         # upper tap
+        (3, 3): 6,         # lower tap
+    },
+
+    "Plants": {
+        (0, 0): 3,         # top-left
+        (4, 5): 3,         # bottom-right
+    },
+
+    "Robots": {
+        10: (1, 1, 0, 3),  # near upper tap, cap 3
+        11: (3, 4, 0, 2),  # near lower tap, cap 2
+    },
+}
+
+#optimal: 29
+problem_hard5 = {
+    "name": "=========problem_hard5=========",
+    "optimal": 29,
+    "Size":  (5, 6),
+
+    "Walls": {
+        # corridor shifted up
+        (0, 2), (0, 3),
+        (2, 2), (2, 3),
+    },
+
+    "Taps": {
+        (1, 2): 8,         # upper tap
+        (3, 3): 8,         # lower tap
+    },
+
+    "Plants": {
+        (0, 0): 4,         # top-left
+        (4, 5): 4,         # bottom-right
+    },
+
+    "Robots": {
+        10: (1, 1, 0, 4),  # near upper tap, cap 3
+        11: (3, 4, 0, 3),  # near lower tap, cap 2
+    },
+}
+
+#optimal: 33
+problem_hard6 = {
+    "name": "=========problem_hard6=========",
+    "optimal": 33,
+    "Size":  (5, 6),
+
+    "Walls": {
+        # corridor shifted up
+        (0, 2), (0, 3),
+        (2, 2), (2, 3),
+    },
+
+    "Taps": {
+        (1, 2): 10,         # upper tap
+        (3, 3): 10,         # lower tap
+    },
+
+    "Plants": {
+        (0, 0): 5,         # top-left
+        (4, 5): 5,         # bottom-right
+    },
+
+    "Robots": {
+        10: (1, 1, 0, 5),  # near upper tap, cap 3
+        11: (3, 4, 0, 4),  # near lower tap, cap 2
+    },
+}
+
+#optimal 65
+problem_load = {
+    "name": "=========problem_load=========",
+    "optimal": 65,
+    "Size":  (10, 4),
+    "Walls": {
+        (0,1),(1, 1), (2, 1), (3, 1), (4, 1), (6, 1),
+        (7, 1), (8, 1), (9, 1),(4,2), (4,3),(6,2), (6,3)
+    },
+
+    # Tap on the left side, with enough water
+    "Taps": {
+        (5, 3): 20,
+    },
+
+    # Plants on the far right, all need water
+    "Plants": {
+        (0, 0): 10,    # upper-right corrido
+        (9, 0): 10,   
+    },
+
+    # Single robot, small capacity → many long trips through the maze
+    "Robots": {
+        10: (2, 0, 0, 2),   # bottom-left area near the tap side
+        11: (7, 0, 0, 20),   # bottom-left area near the tap side
+    },
+}
+
+#optimal: 106
+problem_10x10_single = {
+    "name": "=========problem_10x10_single=========",
+    "optimal": 106,
+    "Size":  (10, 10),
+
+    "Walls": set(),   # completely open grid
+
+    "Taps": {
+        (5, 5): 24,   # central tap
+    },
+
+    "Plants": {
+        (0, 0): 5,    # top-left
+        (0, 9): 5,    # top-right
+        (9, 0): 5,    # bottom-left
+        (9, 9): 5,    # bottom-right
+        # total need = 20
+    },
+
+    "Robots": {
+        10: (9, 5, 0, 5),   # bottom-middle, capacity 3
+    },
+}
+#optimal: 249
+problem_12x12_snake = {
+    "name": "=========problem_12x12_snake=========",
+    "optimal": 249,
+    "Size":  (12, 12),
+
+    # Three vertical "barriers" with single / few gaps:
+    # - Column 3 blocked except row 5 (door there).
+    # - Column 6 blocked except rows 2 and 9 (two doors).
+    # - Column 9 blocked except row 7 (door).
+    "Walls": {
+        (1, 3), (2, 3), (3, 3), (4, 3),
+        (6, 3), (7, 3), (8, 3), (9, 3), (10, 3),
+
+        (1, 6), (3, 6), (4, 6), (5, 6),
+        (6, 6), (7, 6), (8, 6), (10, 6),
+
+        (1, 9), (2, 9), (3, 9), (4, 9),
+        (5, 9), (6, 9), (8, 9), (9, 9), (10, 9),
+    },
+
+    # Tap on the left side, with enough water
+    "Taps": {
+        (5, 1): 24,
+    },
+
+    # Plants on the far right, all need water
+    "Plants": {
+        (2, 11): 5,    # upper-right corridor
+        (7, 11): 5,    # mid-right
+        (10, 10): 5,   # lower-right
+        (0, 8): 5,     # top, near the last barrier
+        # total need = 20
+    },
+
+    # Single robot, small capacity → many long trips through the maze
+    "Robots": {
+        10: (11, 1, 0, 3),   # bottom-left area near the tap side
+    },
+}
+
+#optimal: 343
+problem_12x12_snake_hard = {
+    "name": "=========problem_12x12_snake_hard=========",
+    "optimal": 343,
+    "Size":  (12, 12),
+
+    # Three vertical "barriers" with single / few gaps:
+    # - Column 3 blocked except row 5 (door there).
+    # - Column 6 blocked except rows 2 and 9 (two doors).
+    # - Column 9 blocked except row 7 (door).
+    "Walls": {
+        (1, 3), (2, 3), (3, 3), (4, 3),
+        (6, 3), (7, 3), (8, 3), (9, 3), (10, 3),
+
+        (1, 6), (3, 6), (4, 6), (5, 6),
+        (6, 6), (7, 6), (8, 6), (10, 6),
+
+        (1, 9), (2, 9), (3, 9), (4, 9),
+        (5, 9), (6, 9), (8, 9), (9, 9), (10, 9),
+    },
+
+    # Tap on the left side, with enough water
+    "Taps": {
+        (5, 1): 24,
+    },
+
+    # Plants on the far right, all need water
+    "Plants": {
+        (2, 11): 5,    # upper-right corridor
+        (7, 11): 5,    # mid-right
+        (10, 10): 5,   # lower-right
+        (0, 8): 5,     # top, near the last barrier
+        # total need = 20
+    },
+
+    # Single robot, small capacity → many long trips through the maze
+    "Robots": {
+        10: (11, 1, 0, 2),   # bottom-left area near the tap side
+    },
+}
 
 
 
 
 def main():
     start = time.time()
-    problem = [problem1, problem2, problem3, problem4,problem5_deadend, problem6, problem7]
+    problem = [problem_12x12_snake_hard]
     for p in problem:
         for a in ['astar','gbfs']:
             solve_problems(p, a)

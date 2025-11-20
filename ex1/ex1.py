@@ -211,4 +211,5 @@ def create_watering_problem(game):
 
 if __name__ == '__main__':
     import ex1_check
+
     ex1_check.main()
