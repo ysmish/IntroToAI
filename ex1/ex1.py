@@ -10,21 +10,55 @@ _MOVE_DELTAS = {
     "RIGHT": (0, 1),
 }
 
+# Use a helper function for O(N) lookup from a frozenset
+def _find_entity_state(frozenset_data, key):
+    # Returns (entity_key, value) or None. This remains O(N) but centralises the pattern.
+    return next(((entity_key, value) for (entity_key, value) in frozenset_data if entity_key == key), None)
+
+class StaticInfo:
+    """Holds all static, shared information for a WateringProblem instance."""
+    def __init__(self, size, walls, plant_targets, robot_capacities,
+                 plant_positions, tap_positions):
+        self.size = size
+        self.walls = walls
+        self.plant_targets = plant_targets
+        self.robot_capacities = robot_capacities
+        # plant_positions and tap_positions are frozensets of coordinate tuples
+        self.plant_positions = plant_positions
+        self.tap_positions = tap_positions
+
 class WateringProblem(search.Problem):
-    """Multi-robot watering problem with taps, plants, and walls."""
+    """Multi-robot watering problem with taps, plants, and walls.
+    State format: (static, robot_states, plant_states, tap_states)
+    where:
+      - static is a shared StaticInfo instance
+      - robot_states is a frozenset of (robot_id, r, c, load)
+      - plant_states is a frozenset of ((r, c), poured)
+      - tap_states is a frozenset of ((r, c), remaining)
+    """
 
     def __init__(self, initial_data):
-        # Initialize static values once as instance variables
-        self._size = initial_data["Size"]
-        self._walls = frozenset(initial_data.get("Walls", set()))
-        self._plant_targets = dict(initial_data["Plants"])
-        self._robot_capacities = self._extract_robot_capacities(initial_data["Robots"])
+        # Build static data once and store in one object
+        size = initial_data["Size"]
+        walls = frozenset(initial_data.get("Walls", set()))
+        plant_targets = dict(initial_data["Plants"])
+        robot_capacities = self._extract_robot_capacities(initial_data["Robots"])
 
+        # dynamic states as frozensets of items (hashable)
         robot_states = self._build_robot_states(initial_data["Robots"])
         plant_states = self._build_plant_states(initial_data["Plants"])
         tap_states = self._build_tap_states(initial_data["Taps"])
 
-        search.Problem.__init__(self, (robot_states, plant_states, tap_states))
+        # static quick-lookup sets for positions (immutable)
+        plant_positions = frozenset(initial_data["Plants"].keys())
+        tap_positions = frozenset(initial_data["Taps"].keys())
+
+        self._static = StaticInfo(size, walls, plant_targets, robot_capacities,
+                                  plant_positions, tap_positions)
+
+        # initial state includes the shared static object
+        initial_state = (self._static, robot_states, plant_states, tap_states)
+        search.Problem.__init__(self, initial_state)
 
     @staticmethod
     def _extract_robot_capacities(robots_data):
@@ -34,138 +68,140 @@ class WateringProblem(search.Problem):
         }
 
     def _build_robot_states(self, robots_data):
-        return tuple(
+        # frozenset of (robot_id, r, c, load)
+        return frozenset(
             (robot_id, r, c, load)
             for robot_id, (r, c, load, _) in sorted(robots_data.items())
         )
 
     def _build_plant_states(self, plants_data):
-        states = tuple(
-            (r, c, 0)
+        # frozenset of ((r, c), poured)
+        return frozenset(
+            ((r, c), 0)
             for (r, c) in sorted(plants_data.keys())
         )
-        # Initialize plant index once as instance variable
-        self._plant_index = {
-            (r, c): idx for idx, (r, c, _) in enumerate(states)
-        }
-        return states
 
     def _build_tap_states(self, taps_data):
-        states = tuple(
-            (r, c, remaining)
+        # frozenset of ((r, c), remaining)
+        return frozenset(
+            ((r, c), remaining)
             for (r, c), remaining in sorted(taps_data.items())
         )
-        # Initialize tap index once as instance variable
-        self._tap_index = {
-            (r, c): idx for idx, (r, c, _) in enumerate(states)
-        }
-        return states
 
     def successor(self, state):
-        robot_states, plant_states, tap_states = state
+        static, robot_states, plant_states, tap_states = state
         successors = []
 
-        for robot_index, robot_state in enumerate(robot_states):
-            robot_id, r, c, load = robot_state
+        # iterate robots by reading entries from the frozenset
+        for robot_entry in robot_states:
+            robot_id, r, c, load = robot_entry
 
             successors.extend(
-                self._get_movement_successors(robot_states, plant_states, tap_states,
-                                              robot_index, robot_id, r, c, load)
+                self._get_movement_successors(static, robot_states, plant_states, tap_states,
+                                              robot_entry, robot_id, r, c, load)
             )
 
             successors.extend(
-                self._get_load_successor(robot_states, plant_states, tap_states,
-                                         robot_index, robot_id, r, c, load)
+                self._get_load_successor(static, robot_states, plant_states, tap_states,
+                                         robot_entry, robot_id, r, c, load)
             )
             successors.extend(
-                self._get_pour_successor(robot_states, plant_states, tap_states,
-                                         robot_index, robot_id, r, c, load)
+                self._get_pour_successor(static, robot_states, plant_states, tap_states,
+                                         robot_entry, robot_id, r, c, load)
             )
 
         return successors
 
-    def _get_movement_successors(self, robot_states, plant_states, tap_states,
-                                 robot_index, robot_id, r, c, load):
+    def _get_movement_successors(self, static, robot_states, plant_states, tap_states,
+                                 robot_entry, robot_id, r, c, load):
         successors = []
         occupied = {
             (robot_r, robot_c)
-            for idx, (_, robot_r, robot_c, _) in enumerate(robot_states)
-            if idx != robot_index
+            for (rid, robot_r, robot_c, _) in robot_states
+            if rid != robot_id
         }
 
         for action_name, (dr, dc) in _MOVE_DELTAS.items():
             nr, nc = r + dr, c + dc
             if not self._in_bounds(nr, nc):
                 continue
-            if (nr, nc) in self._walls:
+            if (nr, nc) in static.walls:
                 continue
             if (nr, nc) in occupied:
                 continue
 
-            new_robot_state = (robot_id, nr, nc, load)
-            new_robot_states = self._replace_tuple_entry(robot_states, robot_index, new_robot_state)
-            new_state = (new_robot_states, plant_states, tap_states)
+            old_robot_entry = robot_entry
+            new_robot_entry = (robot_id, nr, nc, load)
+            new_robot_states = (robot_states - {old_robot_entry}) | {new_robot_entry}
+            new_state = (static, new_robot_states, plant_states, tap_states)
             successors.append(((robot_id, action_name), new_state))
 
         return successors
 
-    def _get_load_successor(self, robot_states, plant_states, tap_states,
-                            robot_index, robot_id, r, c, load):
-        tap_idx = self._tap_index.get((r, c))
-        if tap_idx is None:
+    def _get_load_successor(self, static, robot_states, plant_states, tap_states,
+                            robot_entry, robot_id, r, c, load):
+        # find tap entry at robot location (if any)
+        if (r, c) not in static.tap_positions:
             return []
 
-        tap_r, tap_c, remaining = tap_states[tap_idx]
+        tap_entry = _find_entity_state(tap_states, (r, c))
+        if tap_entry is None:
+            return []
+
+        _, remaining = tap_entry
         if remaining <= 0:
             return []
 
-        capacity = self._robot_capacities[robot_id]
+        capacity = static.robot_capacities[robot_id]
         if load >= capacity:
             return []
 
-        new_robot_state = (robot_id, r, c, load + 1)
-        new_robot_states = self._replace_tuple_entry(robot_states, robot_index, new_robot_state)
+        old_robot_entry = robot_entry
+        new_robot_entry = (robot_id, r, c, load + 1)
+        new_robot_states = (robot_states - {old_robot_entry}) | {new_robot_entry}
 
-        new_tap_state = (tap_r, tap_c, remaining - 1)
-        new_tap_states = self._replace_tuple_entry(tap_states, tap_idx, new_tap_state)
+        new_tap_entry = (tap_entry[0], remaining - 1)
+        new_tap_states = (tap_states - {tap_entry}) | {new_tap_entry}
 
-        new_state = (new_robot_states, plant_states, new_tap_states)
+        new_state = (static, new_robot_states, plant_states, new_tap_states)
         return [((robot_id, "LOAD"), new_state)]
 
-    def _get_pour_successor(self, robot_states, plant_states, tap_states,
-                            robot_index, robot_id, r, c, load):
+    def _get_pour_successor(self, static, robot_states, plant_states, tap_states,
+                            robot_entry, robot_id, r, c, load):
         if load <= 0:
             return []
 
-        plant_idx = self._plant_index.get((r, c))
-        if plant_idx is None:
+        if (r, c) not in static.plant_positions:
             return []
 
-        plant_r, plant_c, poured = plant_states[plant_idx]
-        target = self._plant_targets[(plant_r, plant_c)]
+        pos = (r, c)
+        plant_entry = _find_entity_state(plant_states, pos)
+        if plant_entry is None:
+            return []
+
+        pos, poured = plant_entry
+        target = static.plant_targets[pos]
         if poured >= target:
             return []
 
-        new_robot_state = (robot_id, r, c, load - 1)
-        new_robot_states = self._replace_tuple_entry(robot_states, robot_index, new_robot_state)
+        old_robot_entry = robot_entry
+        new_robot_entry = (robot_id, r, c, load - 1)
+        new_robot_states = (robot_states - {old_robot_entry}) | {new_robot_entry}
 
-        new_plant_state = (plant_r, plant_c, poured + 1)
-        new_plant_states = self._replace_tuple_entry(plant_states, plant_idx, new_plant_state)
+        new_plant_entry = (pos, poured + 1)
+        new_plant_states = (plant_states - {plant_entry}) | {new_plant_entry}
 
-        new_state = (new_robot_states, new_plant_states, tap_states)
+        new_state = (static, new_robot_states, new_plant_states, tap_states)
         return [((robot_id, "POUR"), new_state)]
 
-    def _replace_tuple_entry(self, data_tuple, index, new_value):
-        return data_tuple[:index] + (new_value,) + data_tuple[index + 1:]
-
     def _in_bounds(self, r, c):
-        rows, cols = self._size
+        rows, cols = self._static.size
         return 0 <= r < rows and 0 <= c < cols
 
     def goal_test(self, state):
-        _, plant_states, _ = state
-        for r, c, poured in plant_states:
-            if poured < self._plant_targets[(r, c)]:
+        static, _, plant_states, _ = state
+        for (r, c), poured in plant_states:
+            if poured < static.plant_targets[(r, c)]:
                 return False
         return True
 
@@ -173,16 +209,15 @@ class WateringProblem(search.Problem):
         return self._remaining_water_need(node.state)
 
     def h_gbfs(self, node):
-        state = node.state
-        remaining = self._remaining_water_need(state)
+        static, robot_states, plant_states, _ = node.state
+        remaining = self._remaining_water_need(node.state)
         if remaining == 0:
             return 0
 
-        robot_states, plant_states, _ = state
         unsatisfied_plants = [
-            (r, c)
-            for r, c, poured in plant_states
-            if poured < self._plant_targets[(r, c)]
+            pos
+            for (pos, poured) in plant_states
+            if poured < static.plant_targets[pos]
         ]
 
         if not unsatisfied_plants:
@@ -190,17 +225,17 @@ class WateringProblem(search.Problem):
 
         min_distance = min(
             abs(pr - rr) + abs(pc - rc)
-            for (_, rr, rc, _) in robot_states
+            for (rr, rc) in ((robot_r, robot_c) for (_, robot_r, robot_c, _) in robot_states)
             for (pr, pc) in unsatisfied_plants
         )
 
         return remaining + min_distance
 
     def _remaining_water_need(self, state):
-        _, plant_states, _ = state
+        static, _, plant_states, _ = state
         return sum(
-            self._plant_targets[(r, c)] - poured
-            for r, c, poured in plant_states
+            static.plant_targets[pos] - poured
+            for (pos, poured) in plant_states
         )
 
 
