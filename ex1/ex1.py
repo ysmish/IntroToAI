@@ -206,7 +206,10 @@ class WateringProblem(search.Problem):
         return True
 
     def h_astar(self, node):
-        return self._remaining_water_need(node.state)
+        static, robot_states, plant_states, _ = node.state
+        remaining = self._remaining_water_need(node.state)
+        carried = sum(load for (_, _, _, load) in robot_states)
+        return 2*remaining - carried
 
     def h_gbfs(self, node):
         static, robot_states, plant_states, _ = node.state
@@ -234,7 +237,7 @@ class WateringProblem(search.Problem):
     def _remaining_water_need(self, state):
         static, _, plant_states, _ = state
         return sum(
-            static.plant_targets[pos] - poured
+            max(0, static.plant_targets[pos] - poured)
             for (pos, poured) in plant_states
         )
 
