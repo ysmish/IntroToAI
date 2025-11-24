@@ -180,23 +180,121 @@ class WateringProblem(search.Problem):
 
     def _get_pour_successor(self, robot_states, plant_states, tap_states,
                              robot_entry, robot_id, r, c, load):
+        """Generate a POUR successor if robot is on a plant and has water."""
+        # plant positions must be initialized
+        if _PLANT_POSITIONS is None:
+            return []
+
+        # robot must carry at least one unit
+        if load <= 0:
+            return []
+
+        # check if robot is standing on a plant
+        if (r, c) not in _PLANT_POSITIONS:
+            return []
+
+        # find index of this plant in the plant_states tuple
+        try:
+            pidx = _PLANT_POSITIONS.index((r, c))
+        except ValueError:
+            return []
+
+        poured = plant_states[pidx]
+        target = _PLANTS_TARGETS.get((r, c), 0)
+        if poured >= target:
+            return []
+
+        # update robot state (decrement load)
+        old_robot_entry = robot_entry
+        new_robot_entry = (robot_id, r, c, load - 1)
+        new_robot_states = (robot_states - {old_robot_entry}) | {new_robot_entry}
+
+        # update plant_states tuple (increment poured at pidx)
+        new_plant_states = tuple(
+            (poured + 1) if i == pidx else amt
+            for i, amt in enumerate(plant_states)
+        )
+
+        new_state = (new_robot_states, new_plant_states, tap_states)
+        return [((robot_id, "POUR"), new_state)]
+
+    def _in_bounds(self, r, c):
+        """Return True if (r,c) is inside the board defined by _SIZE."""
+        if _SIZE is None:
+            return False
+        rows, cols = _SIZE
+        return 0 <= r < rows and 0 <= c < cols
+
     def goal_test(self, state):
-        """ given a state, checks if this is the goal state, compares to the created goal state returns True/False"""
-        utils.raiseNotDefined()
+        """Return True iff every plant has received its target amount."""
+        # state: (robot_states, plant_states, tap_states)
+        _, plant_states, _ = state
+        if _PLANT_POSITIONS is None or _PLANTS_TARGETS is None:
+            return False
+        for i, pos in enumerate(_PLANT_POSITIONS):
+            poured = plant_states[i]
+            target = _PLANTS_TARGETS.get(pos, 0)
+            if poured < target:
+                return False
+        return True
 
     def h_astar(self, node):
-        """ This is the heuristic. It gets a node (not a state)
-        and returns a goal distance estimate"""
-        utils.raiseNotDefined()
+        """A* admissible heuristic: 2*remaining_water - carried_by_robots (non-negative)."""
+        state = node.state
+        robot_states, _, _ = state
+        remaining = self._remaining_water_need(state)
+        carried = sum(load for (_, _, _, load) in robot_states)
+        h = 2 * remaining - carried
+        return max(0, h)
 
     def h_gbfs(self, node):
-        """ This is the heuristic. It gets a node (not a state)
-        and returns a goal distance estimate"""
-        utils.raiseNotDefined()
+        """Greedy heuristic: remaining water need plus distance to closest unsatisfied plant."""
+        state = node.state
+        robot_states, plant_states, _ = state
+        remaining = self._remaining_water_need(state)
+        if remaining == 0:
+            return 0
+
+        if _PLANT_POSITIONS is None or _PLANTS_TARGETS is None:
+            return remaining
+
+        # unsatisfied plant positions
+        unsatisfied = [
+            pos
+            for i, pos in enumerate(_PLANT_POSITIONS)
+            if plant_states[i] < _PLANTS_TARGETS.get(pos, 0)
+        ]
+
+        if not unsatisfied:
+            return remaining
+
+        # robot positions
+        robot_positions = [(rr, rc) for (_, rr, rc, _) in robot_states]
+        if not robot_positions:
+            return remaining
+
+        min_distance = min(
+            abs(pr - rr) + abs(pc - rc)
+            for (rr, rc) in robot_positions
+            for (pr, pc) in unsatisfied
+        )
+
+        return remaining + min_distance
+
+    def _remaining_water_need(self, state):
+        """Sum of remaining water required by all plants in the state."""
+        _, plant_states, _ = state
+        if _PLANT_POSITIONS is None or _PLANTS_TARGETS is None:
+            return 0
+        total = 0
+        for i, pos in enumerate(_PLANT_POSITIONS):
+            target = _PLANTS_TARGETS.get(pos, 0)
+            poured = plant_states[i]
+            total += max(0, target - poured)
+        return total
 
 
 def create_watering_problem(game):
-    print("<<create_watering_problem")
     """ Create a pressure plate problem, based on the description.
     game - tuple of tuples as described in pdf file"""
     return WateringProblem(game)
