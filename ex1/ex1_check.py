@@ -530,8 +530,6 @@ plants_check = {
     "Robots": {10: (0, 0, 30, 30), 11: (0, 2, 10, 10)},
 }
 
-
-
 tap_fail = {'Size': (6, 6), 'Walls': {(2, 4), (1, 1), (2, 0), (2, 3), (3, 3), (5, 3)}, 'Taps': {(1, 2): 12}, 'Plants': {(0, 5): 2, (4, 0): 1}, 'Robots': {10: (3, 1, 0, 3), 11: (5, 2, 0, 2), 12: (1, 5, 0, 1)}}
 
 # ==========================================
@@ -577,6 +575,10 @@ TEST_SUITE = [
 # 2. GBFS ONLY SUITE (Stress tests, difficult for A*)
 # Use '?' for expected cost if we just want to ensure it finds a solution.
 GBFS_SUITE = [
+    ("itay1", itay1, '?'),
+    ("itay4", itay4, '?'),
+    ("itay6", itay6, '?'),
+    ("itay16", itay16, '?'),
 ]
 
 def main():
