@@ -32,7 +32,7 @@ class WateringProblem(search.Problem):
         for p_pos in self.plant_positions:
             self.plant_bfs_maps[p_pos] = self._bfs_map(p_pos)
         
-        # Calculate full BFS distance map for every TAP (for pruning empty robots)
+        # Calculate full BFS distance map for every TAP
         self.tap_bfs_maps = {}
         for t_pos in self.tap_positions:
             self.tap_bfs_maps[t_pos] = self._bfs_map(t_pos)
@@ -96,13 +96,50 @@ class WateringProblem(search.Problem):
         robot_states, plant_states, tap_states, total_remaining = state
         successors = []
 
+        # Calculate current total load (for Mandatory Load check)
+        current_total_load = sum(l for (_, _, _, l) in robot_states)
+
         # Sort for deterministic expansion
         for robot_entry in sorted(robot_states):
             robot_id, r, c, load = robot_entry
 
+            # --- 1. BLOCKING CHECK ---
+            occupied = {
+                (or_r, or_c)
+                for (oid, or_r, or_c, _) in robot_states
+                if oid != robot_id
+            }
+            
+            is_blocking = False
+            for dr, dc in _MOVES.values():
+                if (r + dr, c + dc) in occupied:
+                    is_blocking = True
+                    break
+
+            # --- 2. MANDATORY POUR OPTIMIZATION ---
+            if load > 0 and (r, c) in self.plant_positions and not is_blocking:
+                pidx = self.plant_positions.index((r, c))
+                if plant_states[pidx] < self.plants_targets[(r, c)]:
+                    successors.extend(
+                        self._get_pour_successor(robot_states, plant_states, tap_states, total_remaining,
+                                                 robot_entry, robot_id, r, c, load)
+                    )
+                    continue 
+
+            # --- 3. MANDATORY LOAD OPTIMIZATION ---
+            if load < self.robots_capacities[robot_id] and (r, c) in self.tap_positions and not is_blocking:
+                tidx = self.tap_positions.index((r, c))
+                if tap_states[tidx] > 0 and total_remaining > current_total_load:
+                    successors.extend(
+                        self._get_load_successor(robot_states, plant_states, tap_states, total_remaining,
+                                                 robot_entry, robot_id, r, c, load)
+                    )
+                    continue
+
+            # --- 4. STANDARD EXPANSION (Fallback) ---
             successors.extend(
                 self._get_movement_successors(robot_states, plant_states, tap_states, total_remaining,
-                                              robot_entry, robot_id, r, c, load)
+                                              robot_entry, robot_id, r, c, load, occupied)
             )
 
             successors.extend(
@@ -118,28 +155,30 @@ class WateringProblem(search.Problem):
         return successors
 
     def _get_movement_successors(self, robot_states, plant_states, tap_states, total_remaining,
-                                 robot_entry, robot_id, r, c, load):
+                                 robot_entry, robot_id, r, c, load, occupied):
         successors = []
-        occupied = {
-            (robot_r, robot_c)
-            for (rid, robot_r, robot_c, _) in robot_states
-            if rid != robot_id
-        }
-
-        # 1. Determine Target Maps (Taps if empty, Plants if loaded)
-        target_maps = self.tap_bfs_maps.values() if load == 0 else self.plant_bfs_maps.values()
+        
+        # --- KEY FIX: INTELLIGENT TARGET SELECTION ---
+        capacity = self.robots_capacities[robot_id]
+        
+        # 1. Determine Target Maps based on Load vs Capacity
+        if load == 0:
+            # Empty -> Must go to Tap
+            target_maps = list(self.tap_bfs_maps.values())
+        elif load == capacity:
+            # Full -> Must go to Plant
+            target_maps = list(self.plant_bfs_maps.values())
+        else:
+            # Partially Full -> Can go to Tap (to fill) OR Plant (to deliver)
+            target_maps = list(self.tap_bfs_maps.values()) + list(self.plant_bfs_maps.values())
 
         # 2. Collect ALL physically valid moves first
         valid_candidates = []
-        
         for action_name, (dr, dc) in _MOVES.items():
             nr, nc = r + dr, c + dc
-            
-            # Check Basic Constraints
             if not (0 <= nr < self.size[0] and 0 <= nc < self.size[1]): continue
             if (nr, nc) in self.walls: continue
             if (nr, nc) in occupied: continue
-            
             valid_candidates.append((action_name, nr, nc))
 
         # 3. Filter for "Improving" moves (Strict Pruning)
@@ -150,7 +189,6 @@ class WateringProblem(search.Problem):
                 curr_dist = bfs_map.get((r, c))
                 next_dist = bfs_map.get((nr, nc))
                 
-                # Check if this specific move reduces distance to THIS specific target
                 if curr_dist is not None and next_dist is not None:
                     if next_dist == curr_dist - 1:
                         is_improving = True
@@ -160,10 +198,6 @@ class WateringProblem(search.Problem):
                 improving_candidates.append((action_name, nr, nc))
 
         # 4. DECISION: Prefer Improving Moves, Fallback if Blocked
-        # If we have at least one valid move that takes us closer, we FORCE the robot
-        # to choose from those (Pruning applied).
-        # If all "closer" moves are blocked (e.g. by another robot), we allow ALL valid
-        # moves (Fallback) to let the robot step aside or retreat.
         final_candidates = improving_candidates if improving_candidates else valid_candidates
 
         # 5. Generate Successors
