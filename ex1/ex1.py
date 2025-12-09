@@ -24,7 +24,8 @@ class WateringProblem(search.Problem):
         self.plant_positions = tuple(sorted(frozenset(initial["Plants"].keys())))
         self.tap_positions = tuple(sorted(frozenset(initial["Taps"].keys())))
 
-        # --- PRE-CALCULATION FOR HEURISTIC & PRUNING ---
+        # 1. INITIAL BFS (On the empty grid, to find the highways)
+        # We need these temporary maps to determine what the "ideal" paths are.
         self.plant_bfs_maps = {}
         for p_pos in self.plant_positions:
             self.plant_bfs_maps[p_pos] = self._bfs_map(p_pos)
@@ -33,58 +34,118 @@ class WateringProblem(search.Problem):
         for t_pos in self.tap_positions:
             self.tap_bfs_maps[t_pos] = self._bfs_map(t_pos)
 
-        # --- OPTIMIZATION: RELAXED STATIC MAP PRUNING ---
+        # --- OPTIMIZATION: HIGHWAY PRUNING (Single Robot Only) ---
         robot_starts = set((r, c) for (r, c, _, _) in initial["Robots"].values())
-        
-        # Calculate BFS from robot start positions to check initial connectivity
-        self.start_bfs_maps = {}
-        for pos in robot_starts:
-            # Avoid re-calculating if start is on a plant/tap
-            if pos not in self.plant_bfs_maps and pos not in self.tap_bfs_maps:
-                self.start_bfs_maps[pos] = self._bfs_map(pos)
+        num_robots = len(initial["Robots"])
 
-        valid_cells = set()
-        
-        def get_dist_map(p):
-            if p in self.plant_bfs_maps: return self.plant_bfs_maps[p]
-            if p in self.tap_bfs_maps: return self.tap_bfs_maps[p]
-            return self.start_bfs_maps.get(p)
-
-        sources = robot_starts | set(self.plant_positions) | set(self.tap_positions)
-        destinations = set(self.plant_positions) | set(self.tap_positions)
-
-        # TOLERANCE: Allow paths slightly longer than optimal to let robots step aside.
-        # K=0 is strict shortest path. K=6 allows a 3-step detour (e.g. step out, wait, step back).
-        TOLERANCE = 6 
-
-        for src in sources:
-            d_map_src = get_dist_map(src)
-            if not d_map_src: continue 
+        if num_robots == 1:
+            # 1. Pre-calculate distances from the single start position
+            start_pos = list(robot_starts)[0]
+            start_bfs_map = self._bfs_map(start_pos)
             
-            for dst in destinations:
-                if src == dst: continue
-                if dst not in d_map_src: continue
+            # 2. Identify all "Points of Interest" (POIs)
+            # We treat them as nodes in a graph that need connecting
+            pois = set(self.plant_positions) | set(self.tap_positions) | {start_pos}
+            
+            # Helper: Get the pre-calculated distance map for a specific POI
+            def get_dist_map(p):
+                if p == start_pos: return start_bfs_map
+                if p in self.plant_bfs_maps: return self.plant_bfs_maps[p]
+                if p in self.tap_bfs_maps: return self.tap_bfs_maps[p]
+                return None
+
+            valid_cells = set()
+
+            # 3. Create Highways between relevant pairs
+            # We iterate strictly through pairs to avoid scanning the whole grid.
+            # We use a "Gradient Walk" to find paths: efficient O(PathLength) instead of O(GridSize).
+            
+            # Generate pairs: (Start -> All), (Taps <-> Plants), (Plants <-> Plants)
+            pairs = []
+            for target in pois:
+                if start_pos != target: pairs.append((start_pos, target))
+            
+            # Connect Taps and Plants (bi-directional logic covered by bfs maps)
+            taps = list(self.tap_positions)
+            plants = list(self.plant_positions)
+            
+            for t in taps:
+                for p in plants:
+                    pairs.append((t, p))
+                    pairs.append((p, t))
+            
+            for p1 in plants:
+                for p2 in plants:
+                    if p1 != p2: pairs.append((p1, p2))
+
+            for src, dst in pairs:
+                d_map_src = get_dist_map(src) # Distances FROM src
+                d_map_dst = get_dist_map(dst) # Distances FROM dst (needed for heuristic check)
                 
-                shortest_dist = d_map_src[dst]
-                d_map_dst = get_dist_map(dst)
-
-                # Check all reachable cells
-                for cell, d_from_src in d_map_src.items():
-                    d_from_dst = d_map_dst.get(cell)
+                # Skip unreachable pairs
+                if not d_map_src or dst not in d_map_src: continue
+                
+                # --- FAST GRADIENT WALK ---
+                # Instead of iterating the whole grid, start at src and walk to neighbors 
+                # that decrease the distance to dst.
+                
+                # To do this efficiently, we use the property:
+                # Cell X is on shortest path if: dist(src, X) + dist(X, dst) == dist(src, dst)
+                # But looking up dist(X, dst) requires a map FROM dst (which we have).
+                
+                shortest_len = d_map_src[dst]
+                
+                # We run a small local BFS to collect ONLY the highway cells
+                queue = [src]
+                visited_local = {src}
+                valid_cells.add(src)
+                
+                idx = 0
+                while idx < len(queue):
+                    curr = queue[idx]
+                    idx += 1
                     
-                    if d_from_dst is not None:
-                        # If this cell is part of a path <= shortest + TOLERANCE, keep it.
-                        if d_from_src + d_from_dst <= shortest_dist + TOLERANCE:
-                            valid_cells.add(cell)
+                    if curr == dst: continue # Reached end of this segment
+                    
+                    dist_current_from_src = d_map_src[curr]
 
-        # Block cells NOT in valid_cells
-        if valid_cells: 
-            new_walls = set(self.walls)
-            for r in range(self.size[0]):
-                for c in range(self.size[1]):
-                    if (r, c) not in self.walls and (r, c) not in valid_cells:
-                        new_walls.add((r, c))
-            self.walls = frozenset(new_walls)
+                    for dr, dc in _MOVES.values():
+                        nr, nc = curr[0] + dr, curr[1] + dc
+                        if (nr, nc) in visited_local: continue
+                        
+                        # Check bounds (fast)
+                        if not (0 <= nr < self.size[0] and 0 <= nc < self.size[1]): continue
+                        
+                        # Is this neighbor valid?
+                        d_n_src = d_map_src.get((nr, nc))
+                        d_n_dst = d_map_dst.get((nr, nc))
+                        
+                        if d_n_src is not None and d_n_dst is not None:
+                            # Strict Shortest Path Check
+                            if d_n_src + d_n_dst == shortest_len:
+                                valid_cells.add((nr, nc))
+                                visited_local.add((nr, nc))
+                                queue.append((nr, nc))
+
+            # 4. Apply Walls
+            if valid_cells: 
+                new_walls = set(self.walls)
+                for r in range(self.size[0]):
+                    for c in range(self.size[1]):
+                        if (r, c) not in self.walls and (r, c) not in valid_cells:
+                            new_walls.add((r, c))
+                self.walls = frozenset(new_walls)
+
+            # 5. RE-CALCULATE BFS MAPS
+            # Essential: The heuristic must now account for the new walls.
+            self.plant_bfs_maps = {}
+            for p_pos in self.plant_positions:
+                self.plant_bfs_maps[p_pos] = self._bfs_map(p_pos)
+            
+            self.tap_bfs_maps = {}
+            for t_pos in self.tap_positions:
+                self.tap_bfs_maps[t_pos] = self._bfs_map(t_pos)
+        
         # --- END OPTIMIZATION ---
 
         # 2. Initialize dynamic values.
@@ -97,6 +158,7 @@ class WateringProblem(search.Problem):
         # State is: (robot_states, plant_states, tap_states, total_remaining)
         initial_state = (robot_states, plant_states, tap_states, total_remaining)
         search.Problem.__init__(self, initial_state)
+
     def _bfs_map(self, start_pos):
         """Runs BFS to find shortest path from start_pos to all NON-WALL cells."""
         queue = [(start_pos, 0)]
@@ -152,7 +214,6 @@ class WateringProblem(search.Problem):
             robot_id, r, c, load = robot_entry
 
             # --- 1. BLOCKING CHECK ---
-            # Check if this robot is adjacent to any other robot
             occupied = {
                 (or_r, or_c)
                 for (oid, or_r, or_c, _) in robot_states
@@ -176,7 +237,6 @@ class WateringProblem(search.Problem):
                  )
 
             # Check LOAD
-            # We only load if we have space AND the global goal requires more water
             if load < self.robots_capacities[robot_id] and (r, c) in self.tap_positions:
                 if total_remaining > current_total_load:
                     possible_actions.extend(
@@ -185,18 +245,10 @@ class WateringProblem(search.Problem):
                     )
 
             # --- 3. APPLY OPTIMIZATION: ACTION PRIORITY ---
-            # "If action performed, skip move unless robot is blocking another robot"
             if possible_actions:
                 successors.extend(possible_actions)
-                
                 if not is_blocking:
-                    # If we can act and we aren't in anyone's way, DO NOT generate moves.
-                    # This prunes the search tree significantly.
                     continue 
-                
-                # If we ARE blocking, we added the actions above, 
-                # but we ALSO fall through to generate moves below 
-                # (so the robot can step aside if necessary).
 
             # --- 4. MOVES (Standard Expansion) ---
             successors.extend(
@@ -209,19 +261,14 @@ class WateringProblem(search.Problem):
     def _get_movement_successors(self, robot_states, plant_states, tap_states, total_remaining,
                                  robot_entry, robot_id, r, c, load, occupied):
         successors = []
-        
-        # --- KEY FIX: INTELLIGENT TARGET SELECTION ---
         capacity = self.robots_capacities[robot_id]
         
         # 1. Determine Target Maps based on Load vs Capacity
         if load == 0:
-            # Empty -> Must go to Tap
             target_maps = list(self.tap_bfs_maps.values())
         elif load == capacity:
-            # Full -> Must go to Plant
             target_maps = list(self.plant_bfs_maps.values())
         else:
-            # Partially Full -> Can go to Tap (to fill) OR Plant (to deliver)
             target_maps = list(self.tap_bfs_maps.values()) + list(self.plant_bfs_maps.values())
 
         # 2. Collect ALL physically valid moves first
@@ -233,7 +280,7 @@ class WateringProblem(search.Problem):
             if (nr, nc) in occupied: continue
             valid_candidates.append((action_name, nr, nc))
 
-        # 3. Filter for "Improving" moves (Strict Pruning)
+        # 3. Filter for "Improving" moves
         improving_candidates = []
         for action_name, nr, nc in valid_candidates:
             is_improving = False
