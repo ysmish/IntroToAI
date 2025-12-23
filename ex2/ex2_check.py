@@ -3,16 +3,6 @@ import ex2
 import numpy as np
 import time
 
-# --- ASSUMED EXTERNAL RANDOM AGENT ---
-# Make sure a file named 'random_agent.py' exists in the same folder
-# and has a class named 'Controller'.
-try:
-    import random_agent
-except ImportError:
-    print("CRITICAL ERROR: 'random_agent.py' not found.")
-    print("Please ensure the random agent file is in the directory and named 'random_agent.py'")
-    exit(1)
-
 # ==========================================
 #        HELPER FUNCTIONS
 # ==========================================
@@ -37,6 +27,28 @@ def run_episode(game, policy_class, time_limit=None):
         violation = True
         
     return game.get_current_reward(), violation
+
+def calculate_estimated_grade(score):
+    """
+    Maps the global average score to the grade based on the provided table image.
+    """
+    if score < 9.38: return 0
+    if score <= 11.65: return "1 - 29"
+    if score <= 13.45: return "30 - 44"
+    if score <= 15.51: return "45 - 59"
+    if score <= 17.9:  return 60         # Passing Threshold
+    if score <= 19.81: return "61 - 65"
+    if score <= 22.01: return "66 - 69"
+    if score <= 25.39: return "70 - 75"
+    if score <= 29.29: return "76 - 79"
+    if score <= 33.79: return "80 - 85"
+    if score <= 37.39: return "86 - 89"
+    if score <= 39.84: return "90 - 93"
+    if score <= 42.46: return "94 - 95"
+    if score <= 45.24: return "96 - 97"
+    if score <= 49.74: return 98
+    if score <= 53.00: return 99
+    return 100
 
 # ==========================================
 #            PROBLEM DEFINITIONS
@@ -261,17 +273,16 @@ def main():
     n_runs = 30 # Number of seeds per problem
     
     print(f"\n{'='*90}")
-    print(f"{'ASSIGNMENT 2: EX2 (NAIVE) vs RANDOM_AGENT COMPARISON':^90}")
+    print(f"{'ASSIGNMENT 2: FINAL GRADER (Table Based)':^90}")
     print(f"{'='*90}\n")
     
-    summary_data = []
-
+    problem_scores = []
+    
     for name, problem in PROBLEM_REGISTRY.items():
-        naive_total = 0.0
-        random_total = 0.0
+        total_reward = 0.0
         time_violations = 0
         
-        # Calculate time limit
+        # Calculate time limit (20 + 0.5 * horizon)
         limit_seconds = 20 + (0.5 * problem["horizon"])
         
         print(f"Running {name:<10} ", end="", flush=True)
@@ -279,39 +290,38 @@ def main():
         for seed in range(n_runs):
             problem["seed"] = seed
             
-            # --- 1. Run Naive Agent (ex2.py) ---
-            game_naive = ext_plant.create_pressure_plate_game((problem, debug_mode))
-            r_naive, v_time = run_episode(game_naive, ex2.Controller, limit_seconds)
-            naive_total += r_naive
+            # Run Agent
+            game = ext_plant.create_pressure_plate_game((problem, debug_mode))
+            run_reward, v_time = run_episode(game, ex2.Controller, limit_seconds)
+            
+            total_reward += run_reward
             if v_time: time_violations += 1
 
-            # --- 2. Run Random Agent (random_agent.py) ---
-            game_random = ext_plant.create_pressure_plate_game((problem, debug_mode))
-            r_random, _ = run_episode(game_random, random_agent.Controller, limit_seconds)
-            random_total += r_random
-            
             # Print dot every 5 seeds
             if seed % 5 == 0:
                 print(".", end="", flush=True)
 
-        avg_naive = naive_total / n_runs
-        avg_random = random_total / n_runs
+        avg_reward = total_reward / n_runs
+        problem_scores.append(avg_reward)
         
-        # Determine Status
-        status = "PASS" if avg_naive > avg_random else "FAIL"
+        # Determine Warnings
+        status_flag = "OK"
+        if time_violations > 0: status_flag = f"SLOW ({time_violations})"
         
-        summary_data.append((name, avg_naive, avg_random, status, time_violations))
-        print(" Done.")
+        print(f" Avg: {avg_reward:.2f} | {status_flag}")
 
-    # --- FINAL COMPARISON TABLE ---
+    # --- CALCULATE FINAL GRADE ---
+    # The grade is based on the average of all 15 problem averages
+    final_average_score = sum(problem_scores) / len(problem_scores)
+    estimated_grade = calculate_estimated_grade(final_average_score)
+
     print("\n" + "="*90)
-    print(f"{'PROBLEM':<12} | {'YOUR REWARD':<15} | {'RANDOM REWARD':<15} | {'STATUS':<8} | {'TIME VIOLATION'}")
+    print(f"{'FINAL REPORT':^90}")
     print("-" * 90)
-    for name, nav, rnd, stat, tv in summary_data:
-        tv_str = f"{tv} runs" if tv > 0 else "OK"
-        print(f"{name:<12} | {nav:<15.2f} | {rnd:<15.2f} | {stat:<8} | {tv_str}")
+    print(f"{'Problem Count':<25} : {len(problem_scores)}")
+    print(f"{'Global Average Reward':<25} : {final_average_score:.2f}")
+    print(f"{'ESTIMATED GRADE':<25} : {estimated_grade}")
     print("="*90)
-    print("Requirement: Your reward must be strictly greater than the Random Policy to PASS.")
 
 if __name__ == "__main__":
     main()
