@@ -1,5 +1,7 @@
 import ext_plant
 import ex2
+import ex2_random
+import sys
 import numpy as np
 import time
 
@@ -14,8 +16,8 @@ RED = "\033[91m"
 SEP = "\n" + ("=" * 60)
 
 
-def solve(game: ext_plant.Game, run_idx: int):
-    policy = ex2.Controller(game)
+def solve(game: ext_plant.Game, run_idx: int, controller_module):
+    policy = controller_module.Controller(game)
     for i in range(game.get_max_steps()):
         game.submit_next_action(
             chosen_action=policy.choose_next_action(game.get_current_state())
@@ -34,6 +36,74 @@ def solve(game: ext_plant.Game, run_idx: int):
         f"Run {run_idx:2d}: {BOLD}{YELLOW}Reward: {r:3d}{RESET} | Steps: {game.get_max_steps():2d} | {color}{finished_txt}{RESET} \nState: {state_str}"
     )
     return r
+
+
+def draw_board(problem):
+    """Draw a simple emoji board for the given problem dict."""
+    rows, cols = problem.get("Size", (0, 0))
+    walls = set(problem.get("Walls", []))
+    taps = dict(problem.get("Taps", {}))
+    plants = dict(problem.get("Plants", {}))
+    robots = dict(problem.get("Robots", {}))
+
+    # Build grid rows (r from 0..rows-1)
+    grid_lines = []
+    for r in range(rows):
+        row_cells = []
+        for c in range(cols):
+            pos = (r, c)
+            if pos in walls:
+                cell = "🧱 "
+            elif pos in taps:
+                # show tap emoji
+                cell = "🚰 "
+            elif pos in plants:
+                cell = "🌱 "
+            else:
+                cell = "⬜ "
+
+            # overlay robot if present (show last digit of id)
+            robot_here = None
+            for rid, (rr, cc, _carried, _cap) in robots.items():
+                if (rr, cc) == pos:
+                    robot_here = rid
+                    break
+            if robot_here is not None:
+                cell = f"🤖{str(robot_here)[-1]}"
+
+            row_cells.append(cell)
+        grid_lines.append(" ".join(row_cells))
+
+    print("\nBoard layout:")
+    for line in grid_lines:
+        print(line)
+    # also print legends for taps/plants/robots (counts)
+    if taps:
+        taps_str = ", ".join([f"{pos}:{amt}" for pos, amt in taps.items()])
+        print(f"Taps: {taps_str}")
+    if plants:
+        plants_str = ", ".join([f"{pos}:{need}" for pos, need in plants.items()])
+        print(f"Plants: {plants_str}")
+    if robots:
+        robots_str = ", ".join(
+            [f"{rid}:{(r,c)}" for rid, (r, c, _car, _cap) in robots.items()]
+        )
+        print(f"Robots: {robots_str}")
+    # Show robot action success probabilities if provided
+    robot_probs = problem.get("robot_chosen_action_prob", {})
+    if robot_probs:
+        probs_str = ", ".join(
+            [f"{rid}:{prob:.2f}" for rid, prob in robot_probs.items()]
+        )
+        print(f"Robot success probs: {probs_str}")
+
+    # Show plant reward distributions if provided
+    plants_reward = problem.get("plants_reward", {})
+    if plants_reward:
+        pr_strs = []
+        for pos, rewards in plants_reward.items():
+            pr_strs.append(f"{pos}:{rewards}")
+        print(f"Plant rewards: {', '.join(pr_strs)}")
 
 
 problem_pdf = {
@@ -589,15 +659,31 @@ def main():
 
     # Collect per-problem summaries
     summaries = []
+    # choose controller module: default `ex2`, or `ex2_random` when 'random' passed
+    args = sys.argv[1:]
+    if "random" in args:
+        controller_module = ex2_random
+    else:
+        controller_module = ex2
+
     for idx, (pname, problem) in enumerate(named_problems, start=1):
+        # Draw the board for this problem before running it
+        print()
+        print(f"*** Problem: {pname} ({idx}) ***")
+        draw_board(problem)
         print(
             f"\n{SEP}\n{BOLD}{MAGENTA}--- Running {pname} (problem index slice item {idx}) ---{RESET}"
         )
         total_reward = 0.0
-        start_time = time.time()
         # Use provided baseline for comparison instead of computing an "ideal"
         baseline_reward, baseline_time = baseline_map.get(pname, (None, None))
         horizon = problem.get("horizon", 0)
+
+        # Per-run time limit (instruction): 20 + 0.5 * horizon
+        time_limit = 20 + 0.5 * horizon
+
+        # Track individual run durations to enforce per-run limit
+        run_times = []
         for seed in range(n_runs):
             # Set a different random seed each run
             problem["seed"] = seed
@@ -605,22 +691,32 @@ def main():
             # Create a fresh game for this run
             game = ext_plant.create_pressure_plate_game((problem, debug_mode))
 
-            # Solve and accumulate reward
-            run_reward = solve(game, seed)
+            # Solve and accumulate reward (measure per-run time)
+            run_start = time.time()
+            run_reward = solve(game, seed, controller_module)
+            run_duration = time.time() - run_start
+            run_times.append(run_duration)
             total_reward += run_reward
 
-        end_time = time.time()
-        duration = end_time - start_time
+            # Report per-run timing immediately for visibility
+            limit_ok = run_duration <= time_limit
+            status_color = GREEN if limit_ok else RED
+            print(
+                f"Run {seed:2d} time: {run_duration:.2f}s | Limit: {time_limit:.2f}s | {status_color}{'OK' if limit_ok else 'TIMEOUT'}{RESET}"
+            )
 
-        # Time limit check: 20 + 0.5 * horizon
-        time_limit = 20 + 0.5 * horizon
+        duration = sum(run_times)
+        avg_time_per_run = duration / n_runs if n_runs else 0.0
+
+        # Time status: PASS only if every run stayed within the per-run limit
+        num_timeouts = sum(1 for t in run_times if t > time_limit)
         time_status = (
             f"{GREEN}PASS{RESET}"
-            if duration <= time_limit
-            else f"{RED}TIMEOUT (Limit: {time_limit}s){RESET}"
+            if num_timeouts == 0
+            else f"{RED}TIMEOUT ({num_timeouts}/{n_runs} runs exceeded {time_limit:.1f}s){RESET}"
         )
 
-        avg_reward = total_reward / n_runs
+        avg_reward = total_reward / n_runs if n_runs else 0.0
         summaries.append(
             (pname, avg_reward, duration, baseline_reward, baseline_time, time_status)
         )
