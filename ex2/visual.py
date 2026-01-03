@@ -635,7 +635,494 @@ problem_new3_version3 = {
     "horizon": 70,
 }
 
-PROBLEM_CONFIG = problem_new3_version3
+
+problem_pdf = {
+    "Size": (3, 3),
+    "Walls": {(0, 1), (2, 1)},
+    "Taps": {(1, 1): 6},
+    "Plants": {(2, 0): 2, (0, 2): 3},
+    "Robots": {10: (1, 0, 0, 2), 11: (1, 2, 0, 2)},
+    "robot_chosen_action_prob": {
+        10: 0.95,
+        11: 0.9,
+    },
+    "goal_reward": 10,
+    "plants_reward": {
+        (0, 2): [1, 2, 3, 4],
+        (2, 0): [1, 2, 3, 4],
+    },
+    "seed": 45,
+    "horizon": 30,
+}
+
+problem_pdf2 = {
+    "Size": (3, 3),
+    "Walls": {(0, 1), (2, 1)},
+    "Taps": {(1, 1): 6},
+    "Plants": {(2, 0): 2, (0, 2): 3},
+    "Robots": {10: (1, 0, 0, 2), 11: (1, 2, 0, 2)},
+    "robot_chosen_action_prob": {
+        10: 0.9,
+        11: 0.8,
+    },
+    "goal_reward": 12,
+    "plants_reward": {
+        (0, 2): [1, 3, 5, 7],
+        (2, 0): [1, 2, 3, 4],
+    },
+    "seed": 45,
+    "horizon": 35,
+}
+
+problem_pdf3 = {
+    "Size": (3, 3),
+    "Walls": {(0, 1), (2, 1)},
+    "Taps": {(1, 1): 6},
+    "Plants": {(2, 0): 2, (0, 2): 3},
+    "Robots": {10: (1, 0, 0, 2), 11: (1, 2, 0, 2)},
+    "robot_chosen_action_prob": {
+        10: 0.7,
+        11: 0.6,
+    },
+    "goal_reward": 30,
+    "plants_reward": {
+        (0, 2): [1, 2, 3, 4],
+        (2, 0): [10, 11, 12, 13],
+    },
+    "seed": 45,
+    "horizon": 30,
+}
+
+problem_new1_version1 = {
+    "Size": (5, 6),
+    "Walls": {
+        # block some middle cells to create a kind of corridor
+        (1, 2),
+        (1, 3),
+        (3, 2),
+        (3, 3),
+    },
+    "Taps": {
+        (2, 2): 12,
+    },
+    "Plants": {
+        (0, 1): 3,
+        (4, 5): 6,
+    },
+    "Robots": {
+        10: (2, 1, 0, 6),
+        11: (2, 4, 0, 3),
+    },
+    "robot_chosen_action_prob": {
+        10: 0.9,
+        11: 0.95,
+    },
+    "goal_reward": 30,
+    "plants_reward": {
+        (4, 5): [1, 2, 3, 4],
+        (0, 1): [10, 11, 12, 13],
+    },
+    "seed": 45,
+    "horizon": 30,
+}
+
+problem_new1_version2 = {
+    "Size": (5, 6),
+    "Walls": {
+        # block some middle cells to create a kind of corridor
+        (1, 2),
+        (1, 3),
+        (3, 2),
+        (3, 3),
+    },
+    "Taps": {
+        (2, 2): 12,
+    },
+    "Plants": {
+        (0, 1): 3,
+        (4, 5): 6,
+    },
+    "Robots": {
+        10: (2, 1, 0, 6),
+        11: (2, 4, 0, 3),
+    },
+    "robot_chosen_action_prob": {
+        10: 0.6,
+        11: 0.95,
+    },
+    "goal_reward": 30,
+    "plants_reward": {
+        (4, 5): [1, 2, 3, 4],
+        (0, 1): [10, 11, 12, 13],
+    },
+    "seed": 45,
+    "horizon": 70,
+}
+
+problem_new1_version3 = {
+    "Size": (5, 6),
+    "Walls": {
+        # block some middle cells to create a kind of corridor
+        (1, 2),
+        (1, 3),
+        (3, 2),
+        (3, 3),
+    },
+    "Taps": {
+        (2, 2): 12,
+    },
+    "Plants": {
+        (0, 1): 2,
+        (4, 5): 6,
+    },
+    "Robots": {
+        10: (2, 1, 0, 6),
+        11: (2, 4, 0, 3),
+    },
+    "robot_chosen_action_prob": {
+        10: 0.6,
+        11: 0.95,
+    },
+    "goal_reward": 30,
+    "plants_reward": {
+        (4, 5): [1, 2, 3, 4],
+        (0, 1): [10, 11, 12, 13],
+    },
+    "seed": 45,
+    "horizon": 30,
+}
+
+problem_new2_version1 = {
+    "Size": (5, 6),
+    "Walls": {
+        # corridor shifted up
+        (0, 2),
+        (0, 3),
+        (2, 2),
+        (2, 3),
+    },
+    "Taps": {
+        (1, 2): 10,  # upper tap
+        (3, 3): 10,  # lower tap
+    },
+    "Plants": {
+        (0, 0): 5,  # top-left
+        (4, 5): 5,  # bottom-right
+    },
+    "Robots": {
+        10: (1, 1, 0, 5),  # near upper tap, cap 3
+        11: (3, 4, 0, 4),  # near lower tap, cap 2
+    },
+    "robot_chosen_action_prob": {
+        10: 0.95,
+        11: 0.95,
+    },
+    "goal_reward": 18,
+    "plants_reward": {
+        (0, 0): [5, 7],
+        (4, 5): [5, 7],
+    },
+    "seed": 45,
+    "horizon": 30,
+}
+
+
+problem_new2_version2 = {
+    "Size": (5, 6),
+    "Walls": {
+        # corridor shifted up
+        (0, 2),
+        (0, 3),
+        (2, 2),
+        (2, 3),
+    },
+    "Taps": {
+        (1, 2): 10,  # upper tap
+        (3, 3): 10,  # lower tap
+    },
+    "Plants": {
+        (0, 0): 5,  # top-left
+        (4, 5): 5,  # bottom-right
+    },
+    "Robots": {
+        10: (1, 1, 0, 5),  # near upper tap, cap 3
+        11: (3, 4, 0, 4),  # near lower tap, cap 2
+    },
+    "robot_chosen_action_prob": {
+        10: 0.95,
+        11: 0.95,
+    },
+    "goal_reward": 18,
+    "plants_reward": {
+        (0, 0): [5, 7],
+        (4, 5): [5, 7],
+    },
+    "seed": 45,
+    "horizon": 70,
+}
+
+problem_new2_version3 = {
+    "Size": (5, 6),
+    "Walls": {
+        # corridor shifted up
+        (0, 2),
+        (0, 3),
+        (2, 2),
+        (2, 3),
+    },
+    "Taps": {
+        (1, 2): 10,  # upper tap
+        (3, 3): 10,  # lower tap
+    },
+    "Plants": {
+        (0, 0): 5,  # top-left
+        (4, 5): 5,  # bottom-right
+    },
+    "Robots": {
+        10: (1, 1, 0, 5),  # near upper tap, cap 3
+        11: (3, 4, 0, 4),  # near lower tap, cap 2
+    },
+    "robot_chosen_action_prob": {
+        10: 0.95,
+        11: 0.95,
+    },
+    "goal_reward": 20,
+    "plants_reward": {
+        (0, 0): [5, 7, 9],
+        (4, 5): [5, 7],
+    },
+    "seed": 45,
+    "horizon": 30,
+}
+
+problem_new2_version4 = {
+    "Size": (5, 6),
+    "Walls": {
+        # corridor shifted up
+        (0, 2),
+        (0, 3),
+        (2, 2),
+        (2, 3),
+    },
+    "Taps": {
+        (1, 2): 10,  # upper tap
+        (3, 3): 10,  # lower tap
+    },
+    "Plants": {
+        (0, 0): 5,  # top-left
+        (4, 5): 5,  # bottom-right
+    },
+    "Robots": {
+        10: (1, 1, 0, 5),  # near upper tap, cap 3
+        11: (3, 4, 0, 4),  # near lower tap, cap 2
+    },
+    "robot_chosen_action_prob": {
+        10: 0.7,
+        11: 0.95,
+    },
+    "goal_reward": 18,
+    "plants_reward": {
+        (0, 0): [5, 7],
+        (4, 5): [5, 7],
+    },
+    "seed": 45,
+    "horizon": 40,
+}
+
+problem_new3_version1 = {
+    "Size": (10, 4),
+    "Walls": {
+        (0, 1),
+        (1, 1),
+        (2, 1),
+        (3, 1),
+        (4, 1),
+        (6, 1),
+        (7, 1),
+        (8, 1),
+        (9, 1),
+        (4, 2),
+        (4, 3),
+        (6, 2),
+        (6, 3),
+    },
+    # Tap on the left side, with enough water
+    "Taps": {
+        (5, 3): 20,
+    },
+    # Plants on the far right, all need water
+    "Plants": {
+        (0, 0): 10,  # upper-right corrido
+        (9, 0): 10,
+    },
+    # Single robot, small capacity → many long trips through the maze
+    "Robots": {
+        10: (2, 0, 0, 2),  # bottom-left area near the tap side
+        11: (7, 0, 0, 20),  # bottom-left area near the tap side
+    },
+    "robot_chosen_action_prob": {
+        10: 0.95,
+        11: 0.95,
+    },
+    "goal_reward": 9,
+    "plants_reward": {
+        (0, 0): [1, 3],
+        (9, 0): [1, 3],
+    },
+    "seed": 45,
+    "horizon": 30,
+}
+
+problem_new3_version2 = {
+    "Size": (10, 4),
+    "Walls": {
+        (0, 1),
+        (1, 1),
+        (2, 1),
+        (3, 1),
+        (4, 1),
+        (6, 1),
+        (7, 1),
+        (8, 1),
+        (9, 1),
+        (4, 2),
+        (4, 3),
+        (6, 2),
+        (6, 3),
+    },
+    # Tap on the left side, with enough water
+    "Taps": {
+        (5, 3): 20,
+    },
+    # Plants on the far right, all need water
+    "Plants": {
+        (0, 0): 10,  # upper-right corrido
+        (9, 0): 10,
+    },
+    # Single robot, small capacity → many long trips through the maze
+    "Robots": {
+        10: (2, 0, 0, 2),  # bottom-left area near the tap side
+        11: (7, 0, 0, 20),  # bottom-left area near the tap side
+    },
+    "robot_chosen_action_prob": {
+        10: 0.95,
+        11: 0.8,
+    },
+    "goal_reward": 9,
+    "plants_reward": {
+        (0, 0): [1, 3],
+        (9, 0): [1, 3],
+    },
+    "seed": 45,
+    "horizon": 50,
+}
+
+problem_new3_version3 = {
+    "Size": (10, 4),
+    "Walls": {
+        (0, 1),
+        (1, 1),
+        (2, 1),
+        (3, 1),
+        (4, 1),
+        (6, 1),
+        (7, 1),
+        (8, 1),
+        (9, 1),
+        (4, 2),
+        (4, 3),
+        (6, 2),
+        (6, 3),
+    },
+    # Tap on the left side, with enough water
+    "Taps": {
+        (5, 3): 20,
+    },
+    # Plants on the far right, all need water
+    "Plants": {
+        (0, 0): 5,  # upper-right corrido
+        (9, 0): 5,
+    },
+    # Single robot, small capacity → many long trips through the maze
+    "Robots": {
+        10: (2, 0, 0, 2),  # bottom-left area near the tap side
+        11: (7, 0, 0, 20),  # bottom-left area near the tap side
+    },
+    "robot_chosen_action_prob": {
+        10: 0.95,
+        11: 0.0001,
+    },
+    "goal_reward": 9,
+    "plants_reward": {
+        (0, 0): [1, 3],
+        (9, 0): [1, 3],
+    },
+    "seed": 45,
+    "horizon": 70,
+}
+# reset ?
+problem_new4_version1 = {
+    "Size": (10, 10),
+    "Walls": set(),  # completely open grid
+    "Taps": {
+        (8, 8): 24,
+    },
+    "Plants": {
+        (0, 0): 5,  # top-left
+        (0, 9): 5,  # top-right
+        (9, 0): 5,  # bottom-left
+        (9, 9): 5,  # bottom-right
+        # total need = 20
+    },
+    "Robots": {
+        10: (8, 9, 0, 5),
+    },
+    "robot_chosen_action_prob": {
+        10: 0.95,
+    },
+    "goal_reward": 9,
+    "plants_reward": {
+        (0, 0): [1, 3],
+        (0, 9): [1, 3],
+        (9, 0): [1, 3],
+        (9, 9): [1, 3],
+    },
+    "seed": 45,
+    "horizon": 70,
+}
+
+# reset ?
+problem_new4_version2 = {
+    "Size": (10, 10),
+    "Walls": set(),  # completely open grid
+    "Taps": {
+        (8, 8): 24,
+    },
+    "Plants": {
+        (0, 0): 5,  # top-left
+        (0, 9): 5,  # top-right
+        (9, 0): 5,  # bottom-left
+        (9, 9): 5,  # bottom-right
+        # total need = 20
+    },
+    "Robots": {
+        10: (8, 9, 0, 5),
+    },
+    "robot_chosen_action_prob": {
+        10: 0.85,
+    },
+    "goal_reward": 9,
+    "plants_reward": {
+        (0, 0): [1, 3],
+        (0, 9): [1, 3],
+        (9, 0): [1, 3],
+        (9, 9): [1, 3],
+    },
+    "seed": 45,
+    "horizon": 40,
+}
+
+PROBLEM_CONFIG = problem_pdf3
 
 if __name__ == "__main__":
     status = "Loaded: Dummy (ex2.py not found)"

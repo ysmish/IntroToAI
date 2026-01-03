@@ -567,7 +567,7 @@ class WateringProblem(Problem):
                     is_robot_v = (v < num_robots)
                     
                     if is_robot_u and is_robot_v:
-                        weight = 0 
+                        weight = 0  # Robot to Robot distance is 0 in this MST abstraction
                     else:
                         pos_v = robot_positions[v] if is_robot_v else unsatisfied_plants[v - num_robots]
                         raw_dist = float('inf')
@@ -636,9 +636,178 @@ class Controller:
             
         # Reverse to get Start -> Goal
         return actions[::-1]
+        
+    def _solve_value_iteration(self, current_state):
+        """
+        Solves for the next best action using Value Iteration on a generated state space.
+        Designed for small boards (Expectimax behavior).
+        """
+        # 1. Setup - Create a transient Problem instance to use its successor logic
+        prob_dict = dict(self.game.get_problem())
+        # We need to ensure the WateringProblem is initialized correctly based on current state
+        # The state tuple passed in is (robot_states, plant_states, tap_states, total_remaining)
+        # We need to map the robot_states tuple back to the dict format expected by init if we were to change init,
+        # but here we can just pass the static problem dict to init to get walls/size, and then use the dynamic state.
+        
+        # NOTE: We must ensure capacities are correct in the prob_dict used for 'WateringProblem'
+        # The 'WateringProblem' extracts capacity from "Robots". 
+        # We use the current game problem dict which is static.
+        
+        vi_problem = WateringProblem(prob_dict)
+        
+        # 2. State Space Discovery (BFS from current state)
+        # We expand states to build the graph for VI.
+        MAX_STATES = 2000 # Safety limit
+        states_discovered = {current_state}
+        queue = deque([current_state])
+        transitions = {} # state -> list of (action, next_state)
+        
+        while queue and len(states_discovered) < MAX_STATES:
+            s = queue.popleft()
+            
+            # Check for terminal state
+            if s[3] == 0: # total_remaining == 0
+                continue
+                
+            succs = vi_problem.successor(s)
+            transitions[s] = succs
+            
+            for act, next_s in succs:
+                if next_s not in states_discovered:
+                    states_discovered.add(next_s)
+                    queue.append(next_s)
+                    
+        # 3. Value Iteration
+        # V(s) = max_a [ P(success)*(Reward + gamma*V(s')) + P(fail)*(gamma*V(s)) ]
+        # Reward: Goal=100, Step=-1
+        # To handle the self-loop on failure algebraically:
+        # V(s) = max_a [ (P * (R + gamma * V(s'))) / (1 - gamma * (1 - P)) ]
+        
+        V = {s: 0.0 for s in states_discovered}
+        goal_reward = float(prob_dict.get('goal_reward', 100.0))
+        gamma = 0.95
+        epsilon = 0.01
+        
+        # Get Reliability Map
+        probs_map = self.game.get_problem().get("robot_chosen_action_prob", {})
+        
+        for _ in range(100): # Max iterations
+            delta = 0
+            new_V = V.copy()
+            
+            for s in states_discovered:
+                if s[3] == 0: # Goal state
+                    new_V[s] = goal_reward
+                    continue
+                
+                if s not in transitions:
+                    continue
+                    
+                best_val = -float('inf')
+                
+                for act_str, next_s in transitions[s]:
+                    # Extract robot ID to get probability
+                    # format is "ACTION{ID}"
+                    try:
+                        rid_str = act_str.split('{')[1].strip('}')
+                        rid = int(rid_str)
+                    except:
+                        rid = 0 # Should not happen based on formatting
+                    
+                    p_success = float(probs_map.get(rid, 1.0))
+                    
+                    # Reward function: -1 for time step usually
+                    step_reward = -1.0
+                    
+                    # Bellman update handling stochastic failure (self-loop)
+                    # Q_success = step_reward + gamma * V[next_s]
+                    # If p_success is 0 (stupid robot), value is effectively -infinity or purely local decay
+                    if p_success <= 0.001:
+                        # Avoid division by zero, action is useless
+                        val = -float('inf') 
+                    else:
+                        # Value of successfully moving
+                        v_next = V.get(next_s, 0.0)
+                        term_success = p_success * (step_reward + gamma * v_next)
+                        
+                        # Denominator for geometric series of retries: 1 - gamma*(1-p)
+                        denom = 1.0 - (gamma * (1.0 - p_success))
+                        val = term_success / denom
+                        
+                    if val > best_val:
+                        best_val = val
+                
+                if best_val != -float('inf'):
+                    new_V[s] = best_val
+                    delta = max(delta, abs(new_V[s] - V[s]))
+            
+            V = new_V
+            if delta < epsilon:
+                break
+                
+        # 4. Extract Policy for Current State
+        best_action = None
+        best_q = -float('inf')
+        
+        if current_state in transitions:
+            for act_str, next_s in transitions[current_state]:
+                try:
+                    rid_str = act_str.split('{')[1].strip('}')
+                    rid = int(rid_str)
+                except:
+                    rid = 0
+                
+                p_success = float(probs_map.get(rid, 1.0))
+                step_reward = -1.0
+                
+                if p_success <= 0.001:
+                    q_val = -float('inf')
+                else:
+                    v_next = V.get(next_s, 0.0)
+                    term_success = p_success * (step_reward + gamma * v_next)
+                    denom = 1.0 - (gamma * (1.0 - p_success))
+                    q_val = term_success / denom
+                
+                if q_val > best_q:
+                    best_q = q_val
+                    best_action = act_str
+
+        # Convert action format "UP{1}" -> "UP(1)"
+        if best_action:
+            if "{" in best_action:
+                act, rid = best_action.split("{")
+                rid = rid.strip("}")
+                return f"{act}({rid})"
+            return best_action
+            
+        return None
 
     def choose_next_action(self, state):
         """ Choose the next action given a state."""
+        
+        # --- Value Iteration Trigger for Small Boards ---
+        size = self.game.get_problem().get("Size", (0, 0))
+        if size[0] < 5 and size[1] < 5:
+            try:
+                vi_action = self._solve_value_iteration(state)
+                if vi_action:
+                    # Maintain internal state variables for compatibility
+                    if not hasattr(self, 'plan_actions'):
+                        self.plan_actions = []
+                        self.plan_idx = 0
+                        self.prev_state = None
+                        self.last_action = None
+                        self.consecutive_pour_failures = 0
+                        self.stupid_robots = set()
+                    
+                    self.prev_state = state
+                    self.last_action = vi_action
+                    return vi_action
+            except Exception as e:
+                # Fallback to standard logic if VI fails
+                pass 
+        # ------------------------------------------------
+        
         # Maintain planner state across calls
         if not hasattr(self, 'plan_actions'):
             self.plan_actions = []
